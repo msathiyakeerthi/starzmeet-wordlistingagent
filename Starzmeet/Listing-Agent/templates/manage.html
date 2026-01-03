@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage - Autism Services Scraper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animated-gradient {
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #4facfe);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <div class="animated-gradient text-white">
+        <nav class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-heart text-3xl"></i>
+                    <span class="text-2xl font-bold">Autism Services Directory</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="bg-white bg-opacity-20 backdrop-blur-lg px-4 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-home mr-2"></i>Home
+                    </a>
+                    <a href="/view_data" class="bg-white bg-opacity-20 backdrop-blur-lg px-4 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-database mr-2"></i>View Data ({{ total_places }})
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mx-auto px-6 py-12 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">
+                <i class="fas fa-cog mr-3"></i>Manage System
+            </h1>
+            <p class="text-xl opacity-90">
+                Configure keywords, WordPress sync, and view analytics
+            </p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="container mx-auto px-6 -mt-8 relative z-10">
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <!-- Tab Headers -->
+            <div class="flex border-b">
+                <button onclick="switchTab('keywords')" class="tab-button flex-1 px-6 py-4 text-center font-semibold border-b-2 border-blue-600 text-blue-600" data-tab="keywords">
+                    <i class="fas fa-tags mr-2"></i>Search Keywords
+                </button>
+                <button onclick="switchTab('wordpress')" class="tab-button flex-1 px-6 py-4 text-center font-semibold border-b-2 border-transparent text-gray-600 hover:text-gray-800" data-tab="wordpress">
+                    <i class="fab fa-wordpress mr-2"></i>WordPress Sync
+                </button>
+                <button onclick="switchTab('cities')" class="tab-button flex-1 px-6 py-4 text-center font-semibold border-b-2 border-transparent text-gray-600 hover:text-gray-800" data-tab="cities">
+                    <i class="fas fa-city mr-2"></i>Cities
+                </button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="p-8">
+                <!-- Keywords Tab -->
+                <div id="keywords-tab" class="tab-content active">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Manage Search Keywords</h2>
+                        <button onclick="showAddKeywordModal()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+                            <i class="fas fa-plus mr-2"></i>Add Keyword
+                        </button>
+                    </div>
+
+                    <p class="text-gray-600 mb-6">Manage the keywords used for scraping. Disable unused keywords to speed up searches.</p>
+
+                    <div id="keywordsContainer" class="space-y-6">
+                        <div class="text-center py-12">
+                            <i class="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600">Loading keywords...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WordPress Tab -->
+                <div id="wordpress-tab" class="tab-content">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">WordPress ListingPro Integration</h2>
+
+                    <!-- Configuration -->
+                    <div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-8">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                            <i class="fas fa-cog mr-2 text-blue-600"></i>Configuration
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">WordPress URL</label>
+                                <input type="text" id="wpUrl" placeholder="https://yoursite.com" 
+                                       class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">API Key</label>
+                                <input type="password" id="wpApiKey" placeholder="Your API key" 
+                                       class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                        </div>
+                        <button onclick="saveWordPressConfig()" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+                            <i class="fas fa-save mr-2"></i>Save Configuration
+                        </button>
+                    </div>
+
+                    <!-- Sync Status -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white border-2 border-gray-200 rounded-lg p-6">
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-blue-600" id="totalPlacesCount">{{ total_places }}</div>
+                                <div class="text-sm text-gray-600">Total Places</div>
+                            </div>
+                        </div>
+                        <div class="bg-white border-2 border-gray-200 rounded-lg p-6">
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-green-600" id="syncedPlacesCount">0</div>
+                                <div class="text-sm text-gray-600">Synced to WordPress</div>
+                            </div>
+                        </div>
+                        <div class="bg-white border-2 border-gray-200 rounded-lg p-6">
+                            <div class="text-center">
+                                <div class="text-4xl font-bold text-orange-600" id="unsyncedPlacesCount">{{ total_places }}</div>
+                                <div class="text-sm text-gray-600">Pending Sync</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sync Mode Selection -->
+                    <div class="bg-yellow-50 border-l-4 border-yellow-600 p-6 rounded-lg mb-6">
+                        <h3 class="font-semibold text-gray-800 mb-3">
+                            <i class="fas fa-cogs text-yellow-600 mr-2"></i>Sync Mode
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4">Choose how to handle existing listings in WordPress</p>
+                        <div class="space-y-3">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="radio" name="syncMode" value="skip" checked class="mt-1 mr-3">
+                                <div>
+                                    <div class="font-semibold text-gray-800">Skip Existing Listings (Safest)</div>
+                                    <div class="text-xs text-gray-600">Only creates NEW listings. Skips any that already exist in WordPress.</div>
+                                </div>
+                            </label>
+                            <label class="flex items-start cursor-pointer">
+                                <input type="radio" name="syncMode" value="update" class="mt-1 mr-3">
+                                <div>
+                                    <div class="font-semibold text-gray-800">Update Existing Listings (Recommended)</div>
+                                    <div class="text-xs text-gray-600">Updates existing listings with fresh data. Creates new if not found.</div>
+                                </div>
+                            </label>
+                            <label class="flex items-start cursor-pointer">
+                                <input type="radio" name="syncMode" value="force" class="mt-1 mr-3">
+                                <div>
+                                    <div class="font-semibold text-gray-800 text-red-600">Force Create (May Duplicate)</div>
+                                    <div class="text-xs text-gray-600">Always creates new listings. WARNING: May create duplicates!</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Sync Actions -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="border-2 border-green-200 rounded-lg p-6">
+                            <h3 class="font-semibold text-gray-800 mb-3">
+                                <i class="fas fa-sync text-green-600 mr-2"></i>Sync All Places
+                            </h3>
+                            <p class="text-sm text-gray-600 mb-4">Sync all unsynced places to WordPress in bulk.</p>
+                            <button onclick="syncAllPlaces()" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition">
+                                <i class="fas fa-upload mr-2"></i>Sync All
+                            </button>
+                        </div>
+
+                        <div class="border-2 border-blue-200 rounded-lg p-6">
+                            <h3 class="font-semibold text-gray-800 mb-3">
+                                <i class="fas fa-map-marker-alt text-blue-600 mr-2"></i>Sync by Location
+                            </h3>
+                            <p class="text-sm text-gray-600 mb-4">Sync places from a specific location only.</p>
+                            <div class="flex gap-2">
+                                <input type="text" id="syncLocation" placeholder="e.g., California" 
+                                       class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <button onclick="syncByLocation()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+                                    Sync
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sync Progress -->
+                    <div id="syncProgress" class="hidden mt-8 bg-purple-50 border-l-4 border-purple-600 p-6 rounded-lg">
+                        <h3 class="font-semibold text-gray-800 mb-4">
+                            <i class="fas fa-spinner fa-spin text-purple-600 mr-2"></i>Syncing in Progress...
+                        </h3>
+                        <div class="w-full bg-gray-200 rounded-full h-4 mb-2">
+                            <div id="syncProgressBar" class="bg-purple-600 h-4 rounded-full transition-all" style="width: 0%"></div>
+                        </div>
+                        <p class="text-sm text-gray-600" id="syncProgressText">Preparing...</p>
+                    </div>
+
+                    <!-- Advanced Sync (Select Specific Places) -->
+                    <div class="mt-8 border-t-2 pt-8">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">
+                            <i class="fas fa-sliders-h text-indigo-600 mr-2"></i>Advanced Sync (Select Specific Places)
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <!-- Country Selector -->
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                    <i class="fas fa-globe mr-1"></i>Country
+                                </label>
+                                <select id="countrySelect" onchange="loadStates()" 
+                                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <option value="">-- Select Country --</option>
+                                </select>
+                            </div>
+
+                            <!-- State Selector -->
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                    <i class="fas fa-map mr-1"></i>State / Province
+                                </label>
+                                <select id="stateSelect" onchange="loadCities()" disabled
+                                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <option value="">-- Select State --</option>
+                                </select>
+                            </div>
+
+                            <!-- City Selector -->
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                    <i class="fas fa-city mr-1"></i>City
+                                </label>
+                                <select id="citySelect" onchange="loadPlaces()" disabled
+                                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <option value="">-- Select City --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Filter Options -->
+                        <div class="flex items-center gap-4 mb-4">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="unsyncedOnlyCheck" onchange="loadPlaces()" class="mr-2">
+                                <span class="text-sm text-gray-700">Show unsynced only</span>
+                            </label>
+                            <span id="placesCount" class="text-sm text-gray-600"></span>
+                        </div>
+
+                        <!-- Places List -->
+                        <div id="placesListContainer" class="hidden">
+                            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="font-semibold text-gray-800">Select Places to Sync</h4>
+                                    <div class="space-x-2">
+                                        <button onclick="selectAllPlaces()" class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition">
+                                            <i class="fas fa-check-double mr-1"></i>Select All
+                                        </button>
+                                        <button onclick="deselectAllPlaces()" class="text-sm bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 transition">
+                                            <i class="fas fa-times mr-1"></i>Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div id="placesList" class="max-h-96 overflow-y-auto space-y-2">
+                                    <!-- Places will be loaded here -->
+                                </div>
+                            </div>
+
+                            <button onclick="syncSelectedPlaces()" id="syncSelectedBtn" disabled
+                                    class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                <i class="fas fa-upload mr-2"></i>Sync Selected Places (<span id="selectedCount">0</span>)
+                            </button>
+                        </div>
+
+                        <div id="noPlacesMessage" class="hidden text-center py-8 text-gray-600">
+                            <i class="fas fa-info-circle text-4xl mb-3"></i>
+                            <p>Select a location to view available places</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cities Tab -->
+                <div id="cities-tab" class="tab-content">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Places by City</h2>
+                        <p class="text-gray-600">
+                            <span id="totalCitiesCount">0</span> cities • <span id="totalLocationsCount">{{ total_places }}</span> places
+                        </p>
+                    </div>
+
+                    <div id="citiesContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="text-center py-12 col-span-full">
+                            <i class="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600">Loading cities...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Keyword Modal -->
+    <div id="addKeywordModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-xl">
+                <h3 class="text-2xl font-bold">
+                    <i class="fas fa-plus-circle mr-2"></i>Add New Keyword
+                </h3>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Keyword</label>
+                    <input type="text" id="newKeyword" placeholder="e.g., autism therapy centers" 
+                           class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select id="newKeywordCategory" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="Autism Core">Autism Core</option>
+                        <option value="ADHD">ADHD</option>
+                        <option value="Therapy">Therapy</option>
+                        <option value="Learning">Learning</option>
+                        <option value="Community">Community & Recreation</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="addKeyword()" class="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition">
+                        <i class="fas fa-plus mr-2"></i>Add
+                    </button>
+                    <button onclick="closeAddKeywordModal()" class="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-400 transition">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="fixed top-20 right-5 z-50"></div>
+
+    <script>
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('border-blue-600', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-600');
+            });
+            
+            document.getElementById(tabName + '-tab').classList.add('active');
+            const button = document.querySelector(`[data-tab="${tabName}"]`);
+            button.classList.remove('border-transparent', 'text-gray-600');
+            button.classList.add('border-blue-600', 'text-blue-600');
+
+            if (tabName === 'keywords') loadKeywords();
+            if (tabName === 'wordpress') loadSyncStatus();
+            if (tabName === 'cities') loadCities();
+        }
+
+        // Notifications
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                info: 'bg-blue-600',
+                warning: 'bg-yellow-600'
+            };
+            
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-exclamation-circle',
+                info: 'fa-info-circle',
+                warning: 'fa-exclamation-triangle'
+            };
+            
+            notification.className = `${colors[type]} text-white rounded-lg shadow-lg p-4 mb-4 min-w-80 animate-slide-in`;
+            notification.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas ${icons[type]} text-xl"></i>
+                        <span>${message}</span>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(notification);
+            setTimeout(() => notification.remove(), 5000);
+        }
+
+        // Keywords Management
+        async function loadKeywords() {
+            try {
+                const response = await fetch('/api/keywords');
+                const keywords = await response.json();
+                
+                const container = document.getElementById('keywordsContainer');
+                
+                if (keywords.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-12">
+                            <i class="fas fa-tags text-6xl text-gray-300 mb-4"></i>
+                            <p class="text-xl text-gray-600 mb-4">No keywords found</p>
+                            <button onclick="showAddKeywordModal()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition">
+                                <i class="fas fa-plus mr-2"></i>Add Your First Keyword
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const categories = {};
+                keywords.forEach(kw => {
+                    if (!categories[kw.category]) categories[kw.category] = [];
+                    categories[kw.category].push(kw);
+                });
+
+                container.innerHTML = '';
+                Object.keys(categories).forEach(category => {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'border-2 border-gray-200 rounded-lg p-6';
+                    categoryDiv.innerHTML = `
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">${category}</h3>
+                        <div class="space-y-2">
+                            ${categories[category].map(kw => `
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                                    <div class="flex items-center space-x-3">
+                                        <input type="checkbox" ${kw.active ? 'checked' : ''} 
+                                               onchange="toggleKeyword(${kw.id}, this.checked)"
+                                               class="w-5 h-5 text-blue-600">
+                                        <span class="text-gray-800">${kw.keyword}</span>
+                                        ${kw.last_used ? `<span class="text-xs text-gray-500">Last used: ${new Date(kw.last_used).toLocaleDateString()}</span>` : ''}
+                                    </div>
+                                    <button onclick="deleteKeyword(${kw.id})" class="text-red-600 hover:text-red-800">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    container.appendChild(categoryDiv);
+                });
+            } catch (error) {
+                showNotification('Failed to load keywords: ' + error.message, 'error');
+            }
+        }
+
+        async function toggleKeyword(id, active) {
+            try {
+                await fetch(`/api/keywords/${id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({active: active ? 1 : 0})
+                });
+                showNotification('Keyword updated', 'success');
+            } catch (error) {
+                showNotification('Failed to update keyword', 'error');
+            }
+        }
+
+        async function deleteKeyword(id) {
+            if (!confirm('Delete this keyword?')) return;
+            
+            try {
+                await fetch(`/api/keywords/${id}`, {method: 'DELETE'});
+                showNotification('Keyword deleted', 'success');
+                loadKeywords();
+            } catch (error) {
+                showNotification('Failed to delete keyword', 'error');
+            }
+        }
+
+        function showAddKeywordModal() {
+            document.getElementById('addKeywordModal').classList.remove('hidden');
+        }
+
+        function closeAddKeywordModal() {
+            document.getElementById('addKeywordModal').classList.add('hidden');
+            document.getElementById('newKeyword').value = '';
+        }
+
+        async function addKeyword() {
+            const keyword = document.getElementById('newKeyword').value.trim();
+            const category = document.getElementById('newKeywordCategory').value;
+            
+            if (!keyword) {
+                showNotification('Please enter a keyword', 'warning');
+                return;
+            }
+
+            try {
+                await fetch('/api/keywords', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({keyword, category})
+                });
+                showNotification('Keyword added successfully', 'success');
+                closeAddKeywordModal();
+                loadKeywords();
+            } catch (error) {
+                showNotification('Failed to add keyword', 'error');
+            }
+        }
+
+        // WordPress Sync
+        function saveWordPressConfig() {
+            const url = document.getElementById('wpUrl').value;
+            const apiKey = document.getElementById('wpApiKey').value;
+            
+            if (!url || !apiKey) {
+                showNotification('Please fill in all fields', 'warning');
+                return;
+            }
+
+            localStorage.setItem('wp_url', url);
+            localStorage.setItem('wp_api_key', apiKey);
+            showNotification('Configuration saved', 'success');
+        }
+
+        async function loadSyncStatus() {
+            try {
+                const response = await fetch('/api/wordpress/sync-status');
+                const data = await response.json();
+                
+                document.getElementById('totalPlacesCount').textContent = data.total || 0;
+                document.getElementById('syncedPlacesCount').textContent = data.synced || 0;
+                document.getElementById('unsyncedPlacesCount').textContent = data.unsynced || 0;
+
+                // Load saved config
+                const url = localStorage.getItem('wp_url');
+                const apiKey = localStorage.getItem('wp_api_key');
+                if (url) document.getElementById('wpUrl').value = url;
+                if (apiKey) document.getElementById('wpApiKey').value = apiKey;
+            } catch (error) {
+                showNotification('Failed to load sync status', 'error');
+            }
+        }
+
+        function getSyncMode() {
+            const radios = document.getElementsByName('syncMode');
+            for (const radio of radios) {
+                if (radio.checked) {
+                    return radio.value;
+                }
+            }
+            return 'skip';
+        }
+
+        async function syncAllPlaces() {
+            const url = localStorage.getItem('wp_url');
+            const apiKey = localStorage.getItem('wp_api_key');
+            const syncMode = getSyncMode();
+            
+            if (!url || !apiKey) {
+                showNotification('Please configure WordPress settings first', 'warning');
+                return;
+            }
+
+            const modeText = {
+                'skip': 'Skip existing listings',
+                'update': 'Update existing listings',
+                'force': 'Force create (may duplicate)'
+            };
+
+            if (!confirm(`Sync all unsynced places to WordPress?\nMode: ${modeText[syncMode]}`)) return;
+
+            document.getElementById('syncProgress').classList.remove('hidden');
+            document.getElementById('syncProgressText').textContent = 'Starting sync...';
+            
+            try {
+                const response = await fetch('/api/wordpress/sync-bulk', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({wp_url: url, api_key: apiKey, sync_mode: syncMode})
+                });
+                const data = await response.json();
+                
+                document.getElementById('syncProgress').classList.add('hidden');
+                
+                let message = `Synced: ${data.synced || 0}`;
+                if (data.skipped) message += `, Skipped: ${data.skipped}`;
+                if (data.failed) message += `, Failed: ${data.failed}`;
+                
+                showNotification(message, data.failed > 0 ? 'warning' : 'success');
+                
+                if (data.errors && data.errors.length > 0) {
+                    console.error('Sync errors:', data.errors);
+                }
+                
+                loadSyncStatus();
+            } catch (error) {
+                document.getElementById('syncProgress').classList.add('hidden');
+                showNotification('Sync failed: ' + error.message, 'error');
+            }
+        }
+
+        async function syncByLocation() {
+            const location = document.getElementById('syncLocation').value.trim();
+            const url = localStorage.getItem('wp_url');
+            const apiKey = localStorage.getItem('wp_api_key');
+            const syncMode = getSyncMode();
+            
+            if (!location) {
+                showNotification('Please enter a location', 'warning');
+                return;
+            }
+
+            if (!url || !apiKey) {
+                showNotification('Please configure WordPress settings first', 'warning');
+                return;
+            }
+
+            const modeText = {
+                'skip': 'Skip existing listings',
+                'update': 'Update existing listings',
+                'force': 'Force create (may duplicate)'
+            };
+
+            if (!confirm(`Sync places from ${location}?\nMode: ${modeText[syncMode]}`)) return;
+
+            document.getElementById('syncProgress').classList.remove('hidden');
+            document.getElementById('syncProgressText').textContent = `Syncing ${location}...`;
+            
+            try {
+                const response = await fetch('/api/wordpress/sync-bulk', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({wp_url: url, api_key: apiKey, location, sync_mode: syncMode})
+                });
+                const data = await response.json();
+                
+                document.getElementById('syncProgress').classList.add('hidden');
+                
+                let message = `${location}: Synced ${data.synced || 0}`;
+                if (data.skipped) message += `, Skipped ${data.skipped}`;
+                if (data.failed) message += `, Failed ${data.failed}`;
+                
+                showNotification(message, data.failed > 0 ? 'warning' : 'success');
+                loadSyncStatus();
+            } catch (error) {
+                document.getElementById('syncProgress').classList.add('hidden');
+                showNotification('Sync failed: ' + error.message, 'error');
+            }
+        }
+
+        // Cities
+        async function loadCities() {
+            try {
+                const response = await fetch('/api/cities');
+                const cities = await response.json();
+                
+                const container = document.getElementById('citiesContainer');
+                document.getElementById('totalCitiesCount').textContent = cities.length;
+                
+                if (cities.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-12 col-span-full">
+                            <i class="fas fa-city text-6xl text-gray-300 mb-4"></i>
+                            <p class="text-xl text-gray-600">No cities found</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = cities.map(city => `
+                    <div class="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-lg transition">
+                        <div class="flex items-start justify-between mb-3">
+                            <div>
+                                <h3 class="font-bold text-lg text-gray-800">${city.city}</h3>
+                                <p class="text-sm text-gray-600">${city.state}, ${city.country}</p>
+                            </div>
+                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                                ${city.count}
+                            </span>
+                        </div>
+                        <a href="/?location=${encodeURIComponent(city.location)}" 
+                           class="block w-full bg-blue-600 text-white text-center py-2 rounded-lg hover:bg-blue-700 transition text-sm">
+                            <i class="fas fa-search mr-2"></i>Scrape More
+                        </a>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showNotification('Failed to load cities', 'error');
+            }
+        }
+
+        // Advanced Sync - Location Hierarchy
+        let currentPlaces = [];
+        let selectedPlaceIds = new Set();
+
+        async function loadCountries() {
+            try {
+                const response = await fetch('/api/locations/countries');
+                const countries = await response.json();
+                
+                const select = document.getElementById('countrySelect');
+                select.innerHTML = '<option value="">-- Select Country --</option>';
+                
+                countries.forEach(country => {
+                    const option = document.createElement('option');
+                    option.value = country.name;
+                    option.textContent = `${country.name} (${country.count})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                showNotification('Failed to load countries', 'error');
+            }
+        }
+
+        async function loadStates() {
+            const country = document.getElementById('countrySelect').value;
+            const stateSelect = document.getElementById('stateSelect');
+            const citySelect = document.getElementById('citySelect');
+            
+            // Reset dependent selects
+            stateSelect.innerHTML = '<option value="">-- Select State --</option>';
+            citySelect.innerHTML = '<option value="">-- Select City --</option>';
+            document.getElementById('placesListContainer').classList.add('hidden');
+            document.getElementById('noPlacesMessage').classList.remove('hidden');
+            
+            if (!country) {
+                stateSelect.disabled = true;
+                citySelect.disabled = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/locations/states?country=${encodeURIComponent(country)}`);
+                const states = await response.json();
+                
+                states.forEach(state => {
+                    const option = document.createElement('option');
+                    option.value = state.name;
+                    option.textContent = `${state.name} (${state.count})`;
+                    stateSelect.appendChild(option);
+                });
+                
+                stateSelect.disabled = false;
+                citySelect.disabled = true;
+            } catch (error) {
+                showNotification('Failed to load states', 'error');
+            }
+        }
+
+        async function loadCities() {
+            const country = document.getElementById('countrySelect').value;
+            const state = document.getElementById('stateSelect').value;
+            const citySelect = document.getElementById('citySelect');
+            
+            citySelect.innerHTML = '<option value="">-- Select City --</option>';
+            document.getElementById('placesListContainer').classList.add('hidden');
+            document.getElementById('noPlacesMessage').classList.remove('hidden');
+            
+            if (!state) {
+                citySelect.disabled = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/locations/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}`);
+                const cities = await response.json();
+                
+                cities.forEach(city => {
+                    const option = document.createElement('option');
+                    option.value = city.name;
+                    option.textContent = `${city.name} (${city.count})`;
+                    citySelect.appendChild(option);
+                });
+                
+                citySelect.disabled = false;
+            } catch (error) {
+                showNotification('Failed to load cities', 'error');
+            }
+        }
+
+        async function loadPlaces() {
+            const country = document.getElementById('countrySelect').value;
+            const state = document.getElementById('stateSelect').value;
+            const city = document.getElementById('citySelect').value;
+            const unsyncedOnly = document.getElementById('unsyncedOnlyCheck').checked;
+            
+            if (!city) {
+                document.getElementById('placesListContainer').classList.add('hidden');
+                document.getElementById('noPlacesMessage').classList.remove('hidden');
+                return;
+            }
+
+            try {
+                let url = `/api/locations/places?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}&city=${encodeURIComponent(city)}`;
+                if (unsyncedOnly) {
+                    url += '&unsynced_only=true';
+                }
+                
+                const response = await fetch(url);
+                currentPlaces = await response.json();
+                
+                document.getElementById('placesCount').textContent = `${currentPlaces.length} places found`;
+                
+                if (currentPlaces.length === 0) {
+                    document.getElementById('placesListContainer').classList.add('hidden');
+                    document.getElementById('noPlacesMessage').classList.remove('hidden');
+                    return;
+                }
+                
+                // Display places
+                const placesList = document.getElementById('placesList');
+                placesList.innerHTML = '';
+                selectedPlaceIds.clear();
+                
+                currentPlaces.forEach(place => {
+                    const placeDiv = document.createElement('div');
+                    placeDiv.className = 'flex items-start p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-indigo-300 transition';
+                    placeDiv.innerHTML = `
+                        <input type="checkbox" 
+                               class="place-checkbox mt-1 mr-3" 
+                               data-place-id="${place.place_id}"
+                               onchange="updateSelectedCount()">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <h5 class="font-semibold text-gray-800">${place.title}</h5>
+                                ${place.wp_synced ? '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Synced</span>' : '<span class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Not Synced</span>'}
+                            </div>
+                            ${place.category ? `<p class="text-xs text-gray-600 mt-1"><i class="fas fa-tag mr-1"></i>${place.category}</p>` : ''}
+                            ${place.address ? `<p class="text-xs text-gray-500 mt-1"><i class="fas fa-map-marker-alt mr-1"></i>${place.address.substring(0, 80)}...</p>` : ''}
+                            ${place.phone ? `<p class="text-xs text-gray-500 mt-1"><i class="fas fa-phone mr-1"></i>${place.phone}</p>` : ''}
+                        </div>
+                    `;
+                    placesList.appendChild(placeDiv);
+                });
+                
+                document.getElementById('placesListContainer').classList.remove('hidden');
+                document.getElementById('noPlacesMessage').classList.add('hidden');
+                updateSelectedCount();
+                
+            } catch (error) {
+                showNotification('Failed to load places', 'error');
+            }
+        }
+
+        function selectAllPlaces() {
+            document.querySelectorAll('.place-checkbox').forEach(cb => {
+                cb.checked = true;
+                selectedPlaceIds.add(cb.dataset.placeId);
+            });
+            updateSelectedCount();
+        }
+
+        function deselectAllPlaces() {
+            document.querySelectorAll('.place-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            selectedPlaceIds.clear();
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            selectedPlaceIds.clear();
+            document.querySelectorAll('.place-checkbox:checked').forEach(cb => {
+                selectedPlaceIds.add(cb.dataset.placeId);
+            });
+            
+            const count = selectedPlaceIds.size;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('syncSelectedBtn').disabled = count === 0;
+        }
+
+        async function syncSelectedPlaces() {
+            const url = localStorage.getItem('wp_url');
+            const apiKey = localStorage.getItem('wp_api_key');
+            const syncMode = getSyncMode();
+            
+            if (!url || !apiKey) {
+                showNotification('Please configure WordPress settings first', 'warning');
+                return;
+            }
+
+            if (selectedPlaceIds.size === 0) {
+                showNotification('Please select at least one place', 'warning');
+                return;
+            }
+
+            const placeIdsArray = Array.from(selectedPlaceIds);
+            
+            if (!confirm(`Sync ${placeIdsArray.length} selected places to WordPress?`)) return;
+
+            document.getElementById('syncProgress').classList.remove('hidden');
+            document.getElementById('syncProgressText').textContent = `Syncing ${placeIdsArray.length} places...`;
+            
+            try {
+                const response = await fetch('/api/wordpress/sync-bulk', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        wp_url: url, 
+                        api_key: apiKey, 
+                        sync_mode: syncMode,
+                        place_ids: placeIdsArray
+                    })
+                });
+                const data = await response.json();
+                
+                document.getElementById('syncProgress').classList.add('hidden');
+                
+                let message = `Synced: ${data.synced || 0}`;
+                if (data.skipped) message += `, Skipped: ${data.skipped}`;
+                if (data.failed) message += `, Failed: ${data.failed}`;
+                
+                showNotification(message, data.failed > 0 ? 'warning' : 'success');
+                
+                // Reload places to show updated sync status
+                loadPlaces();
+                loadSyncStatus();
+                
+            } catch (error) {
+                document.getElementById('syncProgress').classList.add('hidden');
+                showNotification('Sync failed: ' + error.message, 'error');
+            }
+        }
+
+        // Initialize
+        loadKeywords();
+        loadCountries();
+    </script>
+</body>
+</html>

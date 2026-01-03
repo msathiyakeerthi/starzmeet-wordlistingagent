@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Data - Autism Services Scraper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animated-gradient {
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #4facfe);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+        .card-3d {
+            transition: all 0.3s ease;
+        }
+        .card-3d:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <div class="animated-gradient text-white">
+        <nav class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-heart text-3xl"></i>
+                    <span class="text-2xl font-bold">Autism Services Directory</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="bg-white bg-opacity-20 backdrop-blur-lg px-4 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-home mr-2"></i>Home
+                    </a>
+                    <a href="/view_data" class="bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold">
+                        <i class="fas fa-database mr-2"></i>View Data ({{ total_places }})
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mx-auto px-6 py-12 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">
+                <i class="fas fa-database mr-3"></i>Scraped Data
+            </h1>
+            <p class="text-xl opacity-90">
+                Browse and filter {{ total_places }} autism service providers
+            </p>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="container mx-auto px-6 -mt-8 relative z-10">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-semibold">Total Places</p>
+                        <p class="text-4xl font-bold text-blue-600">{{ total_places }}</p>
+                    </div>
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-map-marker-alt text-3xl text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-semibold">With Websites</p>
+                        <p class="text-4xl font-bold text-green-600" id="websiteCount">0</p>
+                    </div>
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-globe text-3xl text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-semibold">With Phone</p>
+                        <p class="text-4xl font-bold text-purple-600" id="phoneCount">0</p>
+                    </div>
+                    <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-phone text-3xl text-purple-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-semibold">Locations</p>
+                        <p class="text-4xl font-bold text-red-600" id="locationCount">0</p>
+                    </div>
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-map text-3xl text-red-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="container mx-auto px-6 mb-8">
+        <div class="bg-white rounded-xl shadow-lg p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <!-- Search -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-search mr-2 text-blue-600"></i>Search
+                    </label>
+                    <input 
+                        type="text" 
+                        id="searchInput"
+                        placeholder="Search by name, location, category..."
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        oninput="filterPlaces()"
+                    >
+                </div>
+
+                <!-- Status Filter -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-filter mr-2 text-purple-600"></i>Status
+                    </label>
+                    <select 
+                        id="statusFilter"
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        onchange="filterPlaces()"
+                    >
+                        <option value="all">All</option>
+                        <option value="New">New Only</option>
+                        <option value="Old">Old Only</option>
+                    </select>
+                </div>
+
+                <!-- Sort -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-sort mr-2 text-green-600"></i>Sort By
+                    </label>
+                    <select 
+                        id="sortSelect"
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        onchange="sortPlaces()"
+                    >
+                        <option value="title-asc">Title (A-Z)</option>
+                        <option value="title-desc">Title (Z-A)</option>
+                        <option value="status">Status</option>
+                        <option value="location">Location</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-gray-600">
+                    Showing <span id="visibleCount">{{ total_places }}</span> of {{ total_places }} places
+                </p>
+                <button onclick="exportData()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+                    <i class="fas fa-download mr-2"></i>Export CSV
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Places Grid -->
+    <div class="container mx-auto px-6 pb-12">
+        <div id="placesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for place in places %}
+            <div class="place-card card-3d bg-white rounded-xl shadow-lg overflow-hidden" 
+                 data-title="{{ place.Title }}" 
+                 data-location="{{ place.Location }}" 
+                 data-category="{{ place.Category }}"
+                 data-status="{{ place.Status }}">
+                
+                <!-- Card Header -->
+                <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <h3 class="font-bold text-lg mb-1">{{ place.Title }}</h3>
+                            <p class="text-sm opacity-90">
+                                <i class="fas fa-map-marker-alt mr-1"></i>{{ place.Location or place['Google Address'] }}
+                            </p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold {% if place.Status == 'New' %}bg-green-500{% else %}bg-gray-400{% endif %}">
+                            {{ place.Status or 'Old' }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Card Body -->
+                <div class="p-4">
+                    {% if place.Category %}
+                    <div class="mb-3">
+                        <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                            {{ place.Category }}
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    <!-- Contact Info -->
+                    <div class="space-y-2 mb-4">
+                        {% if place.Phone %}
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fas fa-phone w-5 text-blue-600"></i>
+                            <a href="tel:{{ place.Phone }}" class="hover:text-blue-600">{{ place.Phone }}</a>
+                        </div>
+                        {% endif %}
+
+                        {% if place.Email %}
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fas fa-envelope w-5 text-purple-600"></i>
+                            <a href="mailto:{{ place.Email }}" class="hover:text-purple-600">{{ place.Email }}</a>
+                        </div>
+                        {% endif %}
+
+                        {% if place.Website %}
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fas fa-globe w-5 text-green-600"></i>
+                            <a href="{{ place.Website }}" target="_blank" class="hover:text-green-600 truncate">Website</a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Social Links -->
+                    {% if place.Facebook or place.Twitter or place.Instagram or place.Linkedin or place.Youtube %}
+                    <div class="flex items-center space-x-2 mb-4">
+                        {% if place.Facebook %}
+                        <a href="{{ place.Facebook }}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                            <i class="fab fa-facebook text-xl"></i>
+                        </a>
+                        {% endif %}
+                        {% if place.Twitter %}
+                        <a href="{{ place.Twitter }}" target="_blank" class="text-blue-400 hover:text-blue-600">
+                            <i class="fab fa-twitter text-xl"></i>
+                        </a>
+                        {% endif %}
+                        {% if place.Instagram %}
+                        <a href="{{ place.Instagram }}" target="_blank" class="text-pink-600 hover:text-pink-800">
+                            <i class="fab fa-instagram text-xl"></i>
+                        </a>
+                        {% endif %}
+                        {% if place.Linkedin %}
+                        <a href="{{ place.Linkedin }}" target="_blank" class="text-blue-700 hover:text-blue-900">
+                            <i class="fab fa-linkedin text-xl"></i>
+                        </a>
+                        {% endif %}
+                        {% if place.Youtube %}
+                        <a href="{{ place.Youtube }}" target="_blank" class="text-red-600 hover:text-red-800">
+                            <i class="fab fa-youtube text-xl"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Actions -->
+                    <div class="flex gap-2">
+                        {% if place.Website %}
+                        <a href="{{ place.Website }}" target="_blank" class="flex-1 bg-blue-600 text-white text-center py-2 rounded-lg hover:bg-blue-700 transition text-sm">
+                            <i class="fas fa-external-link-alt mr-1"></i>Visit
+                        </a>
+                        {% endif %}
+                        {% if place.Latitude and place.Longitude %}
+                        <a href="https://www.google.com/maps?q={{ place.Latitude }},{{ place.Longitude }}" target="_blank" class="flex-1 bg-green-600 text-white text-center py-2 rounded-lg hover:bg-green-700 transition text-sm">
+                            <i class="fas fa-map-marker-alt mr-1"></i>Map
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- No Results Message -->
+        <div id="noResults" class="hidden text-center py-12">
+            <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+            <p class="text-xl text-gray-600">No places found matching your filters</p>
+        </div>
+    </div>
+
+    <script>
+        let allPlaces = document.querySelectorAll('.place-card');
+        
+        // Calculate stats
+        function calculateStats() {
+            let websiteCount = 0;
+            let phoneCount = 0;
+            let locations = new Set();
+
+            allPlaces.forEach(card => {
+                const cardHtml = card.innerHTML;
+                if (cardHtml.includes('fa-globe')) websiteCount++;
+                if (cardHtml.includes('fa-phone')) phoneCount++;
+                const location = card.dataset.location;
+                if (location) locations.add(location);
+            });
+
+            document.getElementById('websiteCount').textContent = websiteCount;
+            document.getElementById('phoneCount').textContent = phoneCount;
+            document.getElementById('locationCount').textContent = locations.size;
+        }
+
+        calculateStats();
+
+        function filterPlaces() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            let visibleCount = 0;
+
+            allPlaces.forEach(card => {
+                const title = card.dataset.title.toLowerCase();
+                const location = card.dataset.location.toLowerCase();
+                const category = card.dataset.category.toLowerCase();
+                const status = card.dataset.status;
+
+                const matchesSearch = title.includes(searchTerm) || 
+                                     location.includes(searchTerm) || 
+                                     category.includes(searchTerm);
+                const matchesStatus = statusFilter === 'all' || status === statusFilter;
+
+                if (matchesSearch && matchesStatus) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            document.getElementById('visibleCount').textContent = visibleCount;
+            document.getElementById('noResults').classList.toggle('hidden', visibleCount > 0);
+        }
+
+        function sortPlaces() {
+            const sortBy = document.getElementById('sortSelect').value;
+            const grid = document.getElementById('placesGrid');
+            const placesArray = Array.from(allPlaces);
+
+            placesArray.sort((a, b) => {
+                switch(sortBy) {
+                    case 'title-asc':
+                        return a.dataset.title.localeCompare(b.dataset.title);
+                    case 'title-desc':
+                        return b.dataset.title.localeCompare(a.dataset.title);
+                    case 'status':
+                        return b.dataset.status.localeCompare(a.dataset.status);
+                    case 'location':
+                        return a.dataset.location.localeCompare(b.dataset.location);
+                    default:
+                        return 0;
+                }
+            });
+
+            placesArray.forEach(card => grid.appendChild(card));
+        }
+
+        function exportData() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            let url = '/api/download';
+            if (statusFilter !== 'all') {
+                url += `?status=${statusFilter}`;
+            }
+            window.location.href = url;
+        }
+    </script>
+</body>
+</html>
