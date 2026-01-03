@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage - Autism Services Scraper</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @keyframes gradient {
@@ -196,13 +197,39 @@
 
                     <!-- Sync Progress -->
                     <div id="syncProgress" class="hidden mt-8 bg-purple-50 border-l-4 border-purple-600 p-6 rounded-lg">
-                        <h3 class="font-semibold text-gray-800 mb-4">
-                            <i class="fas fa-spinner fa-spin text-purple-600 mr-2"></i>Syncing in Progress...
-                        </h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-gray-800">
+                                <i class="fas fa-spinner fa-spin text-purple-600 mr-2"></i>Syncing in Progress...
+                            </h3>
+                            <button onclick="stopSync()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm">
+                                <i class="fas fa-stop mr-2"></i>Stop Sync
+                            </button>
+                        </div>
                         <div class="w-full bg-gray-200 rounded-full h-4 mb-2">
                             <div id="syncProgressBar" class="bg-purple-600 h-4 rounded-full transition-all" style="width: 0%"></div>
                         </div>
                         <p class="text-sm text-gray-600" id="syncProgressText">Preparing...</p>
+                    </div>
+
+                    <!-- Live API Logs -->
+                    <div class="mt-8 border-t-2 pt-8">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-bold text-gray-800">
+                                <i class="fas fa-terminal text-indigo-600 mr-2"></i>Live API Logs
+                            </h3>
+                            <div class="flex gap-2">
+                                <button onclick="clearLogs()" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition text-sm">
+                                    <i class="fas fa-trash mr-2"></i>Clear Logs
+                                </button>
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="checkbox" id="autoScrollLogs" checked class="mr-2">
+                                    <span class="text-sm text-gray-700">Auto-scroll</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="apiLogsContainer" class="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-xs overflow-auto" style="max-height: 500px; min-height: 300px;">
+                            <div class="text-gray-500">Waiting for API calls...</div>
+                        </div>
                     </div>
 
                     <!-- Advanced Sync (Select Specific Places) -->
@@ -579,6 +606,8 @@
 
             if (!confirm(`Sync all unsynced places to WordPress?\nMode: ${modeText[syncMode]}`)) return;
 
+            syncInProgress = true;
+            syncAbortController = new AbortController();
             document.getElementById('syncProgress').classList.remove('hidden');
             document.getElementById('syncProgressText').textContent = 'Starting sync...';
             
@@ -586,17 +615,23 @@
                 const response = await fetch('/api/wordpress/sync-bulk', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({wp_url: url, api_key: apiKey, sync_mode: syncMode})
+                    body: JSON.stringify({wp_url: url, api_key: apiKey, sync_mode: syncMode}),
+                    signal: syncAbortController.signal
                 });
                 const data = await response.json();
                 
                 document.getElementById('syncProgress').classList.add('hidden');
+                syncInProgress = false;
                 
-                let message = `Synced: ${data.synced || 0}`;
-                if (data.skipped) message += `, Skipped: ${data.skipped}`;
-                if (data.failed) message += `, Failed: ${data.failed}`;
-                
-                showNotification(message, data.failed > 0 ? 'warning' : 'success');
+                if (data.stopped) {
+                    showNotification('Sync stopped by user', 'warning');
+                } else {
+                    let message = `Synced: ${data.synced || 0}`;
+                    if (data.skipped) message += `, Skipped: ${data.skipped}`;
+                    if (data.failed) message += `, Failed: ${data.failed}`;
+                    
+                    showNotification(message, data.failed > 0 ? 'warning' : 'success');
+                }
                 
                 if (data.errors && data.errors.length > 0) {
                     console.error('Sync errors:', data.errors);
@@ -604,8 +639,44 @@
                 
                 loadSyncStatus();
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    showNotification('Sync cancelled', 'info');
+                } else {
+                    showNotification('Sync failed: ' + error.message, 'error');
+                }
                 document.getElementById('syncProgress').classList.add('hidden');
-                showNotification('Sync failed: ' + error.message, 'error');
+                syncInProgress = false;
+            }
+        }
+
+        let syncInProgress = false;
+        let syncAbortController = null;
+
+        async function stopSync() {
+            if (!syncInProgress) {
+                showNotification('No sync in progress', 'info');
+                return;
+            }
+
+            if (!confirm('Stop the current sync operation? It will finish the current item and then stop.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/wordpress/sync-stop', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+                
+                if (syncAbortController) {
+                    syncAbortController.abort();
+                }
+                
+                showNotification('Stopping sync...', 'info');
+                document.getElementById('syncProgressText').textContent = 'Stopping sync...';
+            } catch (error) {
+                showNotification('Failed to stop sync: ' + error.message, 'error');
             }
         }
 
@@ -929,6 +1000,114 @@
             } catch (error) {
                 document.getElementById('syncProgress').classList.add('hidden');
                 showNotification('Sync failed: ' + error.message, 'error');
+            }
+        }
+
+        // Socket.IO for live logs
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Connected to server for live logs');
+            addLogEntry('info', 'Connected to server', 'System');
+        });
+
+        socket.on('api_log', (data) => {
+            addLogEntry(data.type, data.message, data.method || 'API', data);
+        });
+
+        socket.on('sync_progress', (data) => {
+            // Update progress bar
+            if (data.total > 0) {
+                const percentage = ((data.completed || 0) / data.total) * 100;
+                document.getElementById('syncProgressBar').style.width = percentage + '%';
+                document.getElementById('syncProgressText').textContent = 
+                    `Syncing: ${data.place || 'Processing...'} (${data.completed || 0}/${data.total})`;
+            }
+        });
+
+        function addLogEntry(type, message, method, fullData = {}) {
+            const container = document.getElementById('apiLogsContainer');
+            if (!container) return;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Remove "Waiting for API calls..." if it exists
+            if (container.children.length === 1 && container.children[0].textContent.includes('Waiting')) {
+                container.innerHTML = '';
+            }
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'mb-2 border-l-2 pl-2';
+            
+            let color = 'text-green-400';
+            let icon = 'fa-info-circle';
+            let borderColor = 'border-green-500';
+            
+            if (type === 'request') {
+                color = 'text-blue-400';
+                icon = 'fa-arrow-right';
+                borderColor = 'border-blue-500';
+            } else if (type === 'response') {
+                color = 'text-green-400';
+                icon = 'fa-arrow-left';
+                borderColor = 'border-green-500';
+                if (fullData.status >= 400) {
+                    color = 'text-yellow-400';
+                    borderColor = 'border-yellow-500';
+                }
+            } else if (type === 'error') {
+                color = 'text-red-400';
+                icon = 'fa-exclamation-circle';
+                borderColor = 'border-red-500';
+            } else if (type === 'info') {
+                color = 'text-cyan-400';
+                icon = 'fa-info-circle';
+                borderColor = 'border-cyan-500';
+            }
+            
+            logEntry.className += ` ${borderColor}`;
+            
+            let logContent = `<div class="${color}">`;
+            logContent += `<span class="text-gray-500">[${timestamp}]</span> `;
+            logContent += `<i class="fas ${icon} mr-1"></i>`;
+            logContent += `<span class="font-semibold">${method}</span>: ${message}`;
+            logContent += `</div>`;
+            
+            // Add details if available
+            if (fullData.url) {
+                logContent += `<div class="text-gray-400 ml-4 mt-1">URL: <span class="text-cyan-300">${fullData.url}</span></div>`;
+            }
+            if (fullData.status) {
+                const statusColor = fullData.status >= 400 ? 'text-red-400' : 'text-green-400';
+                logContent += `<div class="text-gray-400 ml-4">Status: <span class="${statusColor}">${fullData.status}</span></div>`;
+            }
+            if (fullData.body && typeof fullData.body === 'object') {
+                const bodyStr = JSON.stringify(fullData.body, null, 2).substring(0, 500);
+                logContent += `<div class="text-gray-400 ml-4 mt-1">Response: <pre class="text-xs mt-1 overflow-x-auto whitespace-pre-wrap">${bodyStr}${bodyStr.length >= 500 ? '...' : ''}</pre></div>`;
+            }
+            if (fullData.error) {
+                logContent += `<div class="text-red-400 ml-4 mt-1">Error: ${fullData.error}</div>`;
+            }
+            
+            logEntry.innerHTML = logContent;
+            container.appendChild(logEntry);
+            
+            // Auto-scroll if enabled
+            const autoScroll = document.getElementById('autoScrollLogs');
+            if (autoScroll && autoScroll.checked) {
+                container.scrollTop = container.scrollHeight;
+            }
+            
+            // Limit to 200 entries
+            while (container.children.length > 200) {
+                container.removeChild(container.firstChild);
+            }
+        }
+
+        function clearLogs() {
+            const container = document.getElementById('apiLogsContainer');
+            if (container) {
+                container.innerHTML = '<div class="text-gray-500">Logs cleared. Waiting for API calls...</div>';
             }
         }
 

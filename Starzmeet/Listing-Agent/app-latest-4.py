@@ -207,12 +207,26 @@ class GoogleMapsAutismDataScraperV2:
         return logo_url, banner_url
 
     def extract_photo_urls(self, photos):
+        """Extract photo URLs from Google Places API photos array"""
         if not photos:
             return []
-        return [
-            f"https://places.googleapis.com/v1/{photo.get('name')}/media?maxHeightPx=500&key={self.api_key}"
-            for photo in photos if photo.get('name')
-        ]
+        
+        photo_urls = []
+        for photo in photos:
+            if isinstance(photo, dict):
+                # Google Places API (New) format: photo has 'name' field
+                photo_name = photo.get('name')
+                if photo_name:
+                    # Format: places/{place_id}/photos/{photo_reference}/media
+                    # The name is already in the correct format
+                    photo_url = f"https://places.googleapis.com/v1/{photo_name}/media?maxHeightPx=800&maxWidthPx=800&key={self.api_key}"
+                    photo_urls.append(photo_url)
+            elif isinstance(photo, str):
+                # If it's already a URL, use it directly
+                photo_urls.append(photo)
+        
+        logger.info(f"Extracted {len(photo_urls)} photo URLs from {len(photos)} photos")
+        return photo_urls[:10]  # Limit to 10 photos
 
     def get_existing_place_ids(self, location):
         with get_db() as conn:
@@ -1191,12 +1205,99 @@ def convert_business_hours_to_json(business_hours_str):
     
     return hours_json
 
-def convert_place_to_wordpress_format(place):
-    """Convert scraper format to WordPress ListingPro format"""
-    # Parse location
-    location_parts = []
-    if place.get('Location') and ' > ' in place['Location']:
-        location_parts = place['Location'].split(' > ')
+def upload_image_to_wordpress(image_url, wp_url, api_key, socketio=None):
+    """
+    Upload an image from URL to WordPress media library
+    Returns the WordPress media URL or None if failed
+    """
+    try:
+        # Download the image
+        img_response = requests.get(image_url, timeout=10, stream=True)
+        img_response.raise_for_status()
+        
+        # Get image filename from URL or generate one
+        filename = image_url.split('/')[-1].split('?')[0] or 'image.jpg'
+        if not filename.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
+            filename = 'image.jpg'
+        
+        # Prepare multipart form data
+        files = {
+            'file': (filename, img_response.content, img_response.headers.get('Content-Type', 'image/jpeg'))
+        }
+        
+        headers = {
+            'X-API-Key': api_key,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        # Upload to WordPress media library
+        upload_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/media"
+        upload_response = requests.post(upload_url, files=files, headers=headers, timeout=30)
+        
+        if upload_response.status_code in [200, 201]:
+            media_data = upload_response.json()
+            wp_image_url = media_data.get('source_url') or media_data.get('url')
+            logger.info(f"Uploaded image to WordPress: {wp_image_url}")
+            return wp_image_url
+        else:
+            logger.warning(f"Failed to upload image to WordPress: {upload_response.status_code} - {upload_response.text[:200]}")
+            # Fallback to original URL
+            return image_url
+    except Exception as e:
+        logger.warning(f"Error uploading image to WordPress: {e}, using original URL")
+        # Fallback to original URL
+        return image_url
+
+def convert_place_to_wordpress_format(place, wp_url=None, api_key=None, upload_images=False, socketio=None):
+    """Convert scraper format to WordPress ListingPro format
+    
+    Args:
+        place: Place data dictionary
+        wp_url: WordPress URL (optional, for image upload)
+        api_key: WordPress API key (optional, for image upload)
+        upload_images: If True, upload images to WordPress media library first
+        socketio: SocketIO instance for logging
+    """
+    # Parse location - format: "Country > State > City"
+    # Convert to array: ["Country", "State", "City"]
+    locations_array = []
+    if place.get('Location'):
+        location_str = place['Location'].strip()
+        if ' > ' in location_str:
+            location_parts = [part.strip() for part in location_str.split(' > ') if part.strip()]
+            # Ensure we have exactly 3 parts: [country, state, city]
+            if len(location_parts) >= 3:
+                locations_array = location_parts[:3]  # Take first 3 parts: [country, state, city]
+                logger.info(f"Location parsed: {locations_array} from '{location_str}'")
+            elif len(location_parts) == 2:
+                # If only 2 parts, assume [state, city] and add country if missing
+                locations_array = ['United States', location_parts[0], location_parts[1]]
+                logger.warning(f"Location had only 2 parts, added default country: {locations_array}")
+            elif len(location_parts) == 1:
+                # If only 1 part, it's likely just city
+                locations_array = ['United States', '', location_parts[0]]
+                logger.warning(f"Location had only 1 part, using as city: {locations_array}")
+        elif location_str:
+            # If location exists but no ' > ' separator, treat as city
+            locations_array = ['United States', '', location_str]
+            logger.warning(f"Location had no separator, treating as city: {locations_array}")
+        else:
+            # If no ' > ' separator, try to extract from address
+            address = place.get('Google Address', '')
+            if address:
+                # Try to parse city from address
+                parts = address.split(',')
+                if len(parts) >= 2:
+                    city = parts[-2].strip() if len(parts) >= 2 else parts[-1].strip()
+                    state = parts[-1].strip() if len(parts) >= 2 else ''
+                    locations_array = ['United States', state, city]
+                    logger.warning(f"Location extracted from address: {locations_array}")
+    
+    # Log final locations array format
+    if locations_array:
+        logger.info(f"Sending locations to WordPress for '{place.get('Title', 'Unknown')}': {locations_array}")
+    else:
+        logger.warning(f"No locations array for '{place.get('Title', 'Unknown')}' - Location field: {place.get('Location', 'N/A')}")
     
     # Convert business hours
     business_hours_json = convert_business_hours_to_json(place.get('Business Hours (Day,OpenTime,CloseTime)', ''))
@@ -1205,6 +1306,32 @@ def convert_place_to_wordpress_format(place):
     gallery_images = []
     if place.get('Gallery'):
         gallery_images = [img.strip() for img in place['Gallery'].split(',') if img.strip()][:10]
+    
+    # Get image URLs
+    logo_url = place.get('Logo Image', '') or ''
+    featured_image = place.get('Banner Image', '') or ''
+    
+    # Upload images to WordPress media library if requested
+    if upload_images and wp_url and api_key:
+        if logo_url:
+            logo_url = upload_image_to_wordpress(logo_url, wp_url, api_key, socketio)
+        if featured_image:
+            featured_image = upload_image_to_wordpress(featured_image, wp_url, api_key, socketio)
+        if gallery_images:
+            uploaded_gallery = []
+            for img_url in gallery_images:
+                uploaded_url = upload_image_to_wordpress(img_url, wp_url, api_key, socketio)
+                uploaded_gallery.append(uploaded_url)
+            gallery_images = uploaded_gallery
+    
+    # Log image data for debugging
+    logger.info(f"Images for '{place.get('Title', 'Unknown')}': logo={bool(logo_url)}, featured={bool(featured_image)}, gallery={len(gallery_images)}")
+    if logo_url:
+        logger.debug(f"Logo URL: {logo_url[:100]}...")
+    if featured_image:
+        logger.debug(f"Featured Image URL: {featured_image[:100]}...")
+    if gallery_images:
+        logger.debug(f"Gallery images: {len(gallery_images)} images, first: {gallery_images[0][:100] if gallery_images else 'N/A'}...")
     
     # Parse features and tags
     features = []
@@ -1239,17 +1366,26 @@ def convert_place_to_wordpress_format(place):
         "categories": [place.get('Category', 'Autism Services')] if place.get('Category') else ['Autism Services'],
         "features": features,
         "tags": tags,
-        "locations": location_parts if len(location_parts) >= 3 else [],
+        "locations": locations_array,  # Format: ["Country", "State", "City"]
         "business_hours": business_hours_json,
-        "logo_url": place.get('Logo Image', ''),
-        "featured_image": place.get('Banner Image', ''),
-        "gallery_images": gallery_images,
         "status": "publish"
     }
     
+    # Add images - ensure they're included even if empty
+    if logo_url:
+        wp_data["logo_url"] = logo_url
+    if featured_image:
+        wp_data["featured_image"] = featured_image
+    if gallery_images:
+        wp_data["gallery_images"] = gallery_images
+    
+    # Log final payload (without description for brevity)
+    payload_summary = {k: v for k, v in wp_data.items() if k != 'description'}
+    logger.debug(f"WordPress payload summary for '{place.get('Title', 'Unknown')}': {json.dumps(payload_summary, indent=2)[:500]}")
+    
     return wp_data
 
-def check_existing_in_wordpress(place, wp_url, api_key):
+def check_existing_in_wordpress(place, wp_url, api_key, socketio=None):
     """Check if a listing already exists in WordPress"""
     try:
         headers = {
@@ -1260,7 +1396,36 @@ def check_existing_in_wordpress(place, wp_url, api_key):
         
         # Use GET /wp-json/listingpro/v1/listings to get all listings
         listings_url = f"{wp_url.rstrip('/')}/wp-json/listingpro/v1/listings"
+        
+        # Log API call
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'request',
+                'message': f"Checking for existing listing: {place.get('Title')}",
+                'method': 'GET',
+                'url': listings_url,
+                'headers': {k: v if k != 'X-API-Key' else '***' for k, v in headers.items()}
+            }, namespace='/')
+        
         response = requests.get(listings_url, headers=headers, timeout=10)
+        
+        # Log API response
+        if socketio:
+            try:
+                response_data = response.json()
+                total = response_data.get('total', 0) if isinstance(response_data, dict) else len(response_data) if isinstance(response_data, list) else 0
+            except:
+                response_data = response.text[:200]
+                total = 0
+            
+            socketio.emit('api_log', {
+                'type': 'response',
+                'message': f"Found {total} listings in WordPress",
+                'method': 'GET',
+                'url': listings_url,
+                'status': response.status_code,
+                'body': {'total_listings': total} if isinstance(response_data, dict) else {'preview': str(response_data)[:200]}
+            }, namespace='/')
         
         if response.status_code == 200:
             data = response.json()
@@ -1299,7 +1464,7 @@ def check_existing_in_wordpress(place, wp_url, api_key):
         logger.error(f"Error checking existing listing: {e}")
         return None
 
-def sync_place_to_wordpress(place, wp_url, api_key, sync_mode='skip'):
+def sync_place_to_wordpress(place, wp_url, api_key, sync_mode='skip', socketio=None):
     """
     Sync a single place to WordPress
     
@@ -1309,7 +1474,10 @@ def sync_place_to_wordpress(place, wp_url, api_key, sync_mode='skip'):
     - 'force': Always create new (may duplicate)
     """
     try:
-        wp_data = convert_place_to_wordpress_format(place)
+        # Convert place data - optionally upload images to WordPress media library
+        # Note: For now, we send image URLs directly. If WordPress doesn't accept external URLs,
+        # set upload_images=True to upload images to WordPress media library first
+        wp_data = convert_place_to_wordpress_format(place, wp_url=wp_url, api_key=api_key, upload_images=False, socketio=socketio)
         
         headers = {
             'X-API-Key': api_key,
@@ -1322,22 +1490,113 @@ def sync_place_to_wordpress(place, wp_url, api_key, sync_mode='skip'):
         # Check if listing exists (unless force mode)
         existing_post_id = None
         if sync_mode != 'force':
-            existing_post_id = check_existing_in_wordpress(place, wp_url, api_key)
+            existing_post_id = check_existing_in_wordpress(place, wp_url, api_key, socketio)
         
         if existing_post_id:
             if sync_mode == 'skip':
                 logger.info(f"Skipping existing listing: {place.get('Title')} (WordPress ID: {existing_post_id})")
+                if socketio:
+                    socketio.emit('api_log', {
+                        'type': 'info',
+                        'message': f"Skipping existing listing: {place.get('Title')}",
+                        'method': 'GET',
+                        'url': f"{wp_url.rstrip('/')}/wp-json/listingpro/v1/listings",
+                        'status': 'skipped'
+                    }, namespace='/')
                 return {'status': 'skipped', 'wp_post_id': existing_post_id, 'action': 'skipped'}
             elif sync_mode == 'update':
                 # Update existing listing using PUT /wp-json/listingpro/v1/listing/{id}
                 update_url = f"{api_endpoint}/{existing_post_id}"
+                
+                # Log API call
+                if socketio:
+                    socketio.emit('api_log', {
+                        'type': 'request',
+                        'message': f"Updating listing: {place.get('Title')}",
+                        'method': 'PUT',
+                        'url': update_url,
+                        'headers': {k: v if k != 'X-API-Key' else '***' for k, v in headers.items()},
+                        'body': {k: v for k, v in wp_data.items() if k not in ['description']}  # Exclude large description
+                    }, namespace='/')
+                
                 response = requests.put(update_url, json=wp_data, headers=headers, timeout=30)
+                
+                # Log API response
+                try:
+                    response_data = response.json()
+                except:
+                    response_data = response.text[:500]
+                
+                if socketio:
+                    socketio.emit('api_log', {
+                        'type': 'response',
+                        'message': f"Update response for: {place.get('Title')}",
+                        'method': 'PUT',
+                        'url': update_url,
+                        'status': response.status_code,
+                        'body': response_data
+                    }, namespace='/')
+                
                 response.raise_for_status()
-                logger.info(f"Updated listing: {place.get('Title')} (WordPress ID: {existing_post_id})")
+                
+                # Check response for image confirmation
+                try:
+                    response_data = response.json()
+                    logger.info(f"Updated listing: {place.get('Title')} (WordPress ID: {existing_post_id})")
+                    logger.debug(f"Update response data: {json.dumps(response_data, indent=2)[:500]}")
+                    
+                    # Log if images were included in response
+                    if 'logo_url' in response_data or 'featured_image' in response_data or 'gallery_images' in response_data:
+                        logger.info(f"Images confirmed in WordPress response for '{place.get('Title')}'")
+                    else:
+                        logger.warning(f"Images not found in WordPress response for '{place.get('Title')}' - check if WordPress accepted them")
+                except:
+                    pass
+                
                 return {'status': 'success', 'wp_post_id': existing_post_id, 'action': 'updated'}
         
         # Create new listing using POST /wp-json/listingpro/v1/listing
+        
+        # Log API call with image info
+        body_summary = {k: v for k, v in wp_data.items() if k not in ['description']}
+        # Add image summary
+        image_summary = {
+            'has_logo': bool(wp_data.get('logo_url')),
+            'has_featured': bool(wp_data.get('featured_image')),
+            'gallery_count': len(wp_data.get('gallery_images', []))
+        }
+        body_summary['_image_summary'] = image_summary
+        
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'request',
+                'message': f"Creating listing: {place.get('Title')}",
+                'method': 'POST',
+                'url': api_endpoint,
+                'headers': {k: v if k != 'X-API-Key' else '***' for k, v in headers.items()},
+                'body': body_summary
+            }, namespace='/')
+        
+        logger.info(f"Creating listing '{place.get('Title')}' with images: logo={image_summary['has_logo']}, featured={image_summary['has_featured']}, gallery={image_summary['gallery_count']}")
+        
         response = requests.post(api_endpoint, json=wp_data, headers=headers, timeout=30)
+        
+        # Log API response
+        try:
+            response_data = response.json()
+        except:
+            response_data = response.text[:500]
+        
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'response',
+                'message': f"Create response for: {place.get('Title')}",
+                'method': 'POST',
+                'url': api_endpoint,
+                'status': response.status_code,
+                'body': response_data
+            }, namespace='/')
+        
         response.raise_for_status()
         
         result = response.json()
@@ -1349,16 +1608,44 @@ def sync_place_to_wordpress(place, wp_url, api_key, sync_mode='skip'):
         
         logger.info(f"Created listing: {place.get('Title')} (WordPress ID: {wp_post_id})")
         
+        # Check response for image confirmation
+        logger.debug(f"Create response data: {json.dumps(result, indent=2)[:500]}")
+        if 'logo_url' in result or 'featured_image' in result or 'gallery_images' in result:
+            logger.info(f"Images confirmed in WordPress response for '{place.get('Title')}'")
+        else:
+            logger.warning(f"Images not found in WordPress response for '{place.get('Title')}' - check if WordPress accepted them")
+        
         return {'status': 'success', 'wp_post_id': wp_post_id, 'action': 'created'}
         
     except requests.exceptions.RequestException as e:
+        error_msg = str(e)
         logger.error(f"WordPress API error: {e}")
-        return {'status': 'error', 'error': str(e)}
+        
+        # Log error
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'error',
+                'message': f"API Error for: {place.get('Title')}",
+                'method': 'POST' if not existing_post_id else 'PUT',
+                'url': api_endpoint,
+                'error': error_msg
+            }, namespace='/')
+        
+        return {'status': 'error', 'error': error_msg}
     except Exception as e:
+        error_msg = str(e)
         logger.error(f"Sync error: {e}")
-        return {'status': 'error', 'error': str(e)}
+        
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'error',
+                'message': f"Sync Error for: {place.get('Title')}",
+                'error': error_msg
+            }, namespace='/')
+        
+        return {'status': 'error', 'error': error_msg}
 
-def sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode='skip'):
+def sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode='skip', socketio=None):
     """
     Sync multiple places to WordPress using bulk endpoint
     
@@ -1372,14 +1659,62 @@ def sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode='skip'):
         }
         
         # Convert all places to WordPress format
+        # Note: For now, we send image URLs directly. If WordPress doesn't accept external URLs,
+        # set upload_images=True to upload images to WordPress media library first
         wp_listings = []
         for place in places:
-            wp_data = convert_place_to_wordpress_format(place)
+            wp_data = convert_place_to_wordpress_format(place, wp_url=wp_url, api_key=api_key, upload_images=False, socketio=socketio)
             wp_listings.append(wp_data)
         
         # Use bulk endpoint
         bulk_endpoint = f"{wp_url.rstrip('/')}/wp-json/listingpro/v1/listings/bulk"
-        response = requests.post(bulk_endpoint, json={'listings': wp_listings}, headers=headers, timeout=60)
+        payload = {'listings': wp_listings}
+        
+        # Log API call with image info
+        sample_listing = wp_listings[0] if wp_listings else {}
+        sample_summary = {k: v for k, v in sample_listing.items() if k not in ['description']}
+        # Add image summary for sample
+        if sample_listing:
+            image_summary = {
+                'has_logo': bool(sample_listing.get('logo_url')),
+                'has_featured': bool(sample_listing.get('featured_image')),
+                'gallery_count': len(sample_listing.get('gallery_images', []))
+            }
+            sample_summary['_image_summary'] = image_summary
+        
+        # Count listings with images
+        listings_with_images = sum(1 for l in wp_listings if l.get('logo_url') or l.get('featured_image') or l.get('gallery_images'))
+        
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'request',
+                'message': f'Bulk sync: Creating {len(wp_listings)} listings ({listings_with_images} with images)',
+                'method': 'POST',
+                'url': bulk_endpoint,
+                'headers': {k: v if k != 'X-API-Key' else '***' for k, v in headers.items()},
+                'body': {'listings_count': len(wp_listings), 'listings_with_images': listings_with_images, 'sample': sample_summary}
+            }, namespace='/')
+        
+        logger.info(f"Bulk sync: {len(wp_listings)} listings, {listings_with_images} with images")
+        
+        response = requests.post(bulk_endpoint, json=payload, headers=headers, timeout=60)
+        
+        # Log API response
+        try:
+            response_data = response.json()
+        except:
+            response_data = response.text[:500]
+        
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'response',
+                'message': f'Bulk sync response: {len(wp_listings)} listings',
+                'method': 'POST',
+                'url': bulk_endpoint,
+                'status': response.status_code,
+                'body': response_data
+            }, namespace='/')
+        
         response.raise_for_status()
         
         result = response.json()
@@ -1389,12 +1724,39 @@ def sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode='skip'):
         
     except requests.exceptions.RequestException as e:
         logger.error(f"WordPress bulk API error: {e}")
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'error',
+                'message': 'Bulk sync API error',
+                'method': 'POST',
+                'url': bulk_endpoint if 'bulk_endpoint' in locals() else 'N/A',
+                'error': str(e)
+            }, namespace='/')
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"Response: {e.response.text[:500]}")
         return {'status': 'error', 'error': str(e)}
     except Exception as e:
         logger.error(f"Bulk sync error: {e}")
+        if socketio:
+            socketio.emit('api_log', {
+                'type': 'error',
+                'message': 'Bulk sync error',
+                'error': str(e)
+            }, namespace='/')
         return {'status': 'error', 'error': str(e)}
 
+# Global flag to stop sync
+sync_stop_flag = False
+
 # ==================== WordPress Sync API ====================
+@app.route('/api/wordpress/sync-stop', methods=['POST'])
+def api_wordpress_sync_stop():
+    """Stop the current sync operation"""
+    global sync_stop_flag
+    sync_stop_flag = True
+    logger.info("Sync stop requested by user")
+    return jsonify({"status": "stop_requested", "message": "Sync will stop after current item"})
+
 @app.route('/api/wordpress/sync-status', methods=['GET'])
 def api_wordpress_sync_status():
     try:
@@ -1436,7 +1798,7 @@ def api_wordpress_sync_single():
             place = json.loads(row[0])
         
         # Sync to WordPress
-        result = sync_place_to_wordpress(place, wp_url, api_key, sync_mode)
+        result = sync_place_to_wordpress(place, wp_url, api_key, sync_mode, socketio)
         
         if result['status'] == 'success' or result['status'] == 'skipped':
             # Update sync status in database
@@ -1496,7 +1858,7 @@ def api_wordpress_sync_bulk():
         # Note: Bulk endpoint typically only supports creating new listings
         if use_bulk_endpoint and sync_mode != 'update':
             places = [json.loads(row[1]) for row in rows]
-            bulk_result = sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode)
+            bulk_result = sync_bulk_to_wordpress(places, wp_url, api_key, sync_mode, socketio)
             
             if bulk_result['status'] == 'success':
                 # Update all places as synced
@@ -1522,21 +1884,35 @@ def api_wordpress_sync_bulk():
                 logger.warning(f"Bulk endpoint failed, falling back to individual sync: {bulk_result.get('error')}")
         
         # Individual sync (one by one) - original method
+        global sync_stop_flag
+        sync_stop_flag = False  # Reset stop flag at start
+        
         results = {
             'total': len(rows),
             'synced': 0,
             'skipped': 0,
             'failed': 0,
             'errors': [],
-            'method': 'individual'
+            'method': 'individual',
+            'stopped': False
         }
         
         for row in rows:
+            # Check if stop was requested
+            if sync_stop_flag:
+                logger.info("Sync stopped by user request")
+                results['stopped'] = True
+                results['errors'].append({
+                    'place': 'SYNC_STOPPED',
+                    'error': 'Sync was stopped by user'
+                })
+                break
+            
             place_id = row[0]
             place = json.loads(row[1])
             
             # Sync to WordPress
-            result = sync_place_to_wordpress(place, wp_url, api_key, sync_mode)
+            result = sync_place_to_wordpress(place, wp_url, api_key, sync_mode, socketio)
             
             if result['status'] == 'success':
                 # Update database

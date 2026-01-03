@@ -24,6 +24,45 @@
             transform: translateY(-5px);
             box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.25);
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 2% auto;
+            padding: 0;
+            border: none;
+            width: 90%;
+            max-width: 900px;
+            border-radius: 1rem;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .gallery-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .gallery-image:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -38,6 +77,9 @@
                 <div class="flex items-center space-x-4">
                     <a href="/" class="bg-white bg-opacity-20 backdrop-blur-lg px-4 py-2 rounded-lg hover:bg-opacity-30 transition">
                         <i class="fas fa-home mr-2"></i>Home
+                    </a>
+                    <a href="/manage" class="bg-white bg-opacity-20 backdrop-blur-lg px-4 py-2 rounded-lg hover:bg-opacity-30 transition">
+                        <i class="fas fa-cog mr-2"></i>Manage
                     </a>
                     <a href="/view_data" class="bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold">
                         <i class="fas fa-database mr-2"></i>View Data ({{ total_places }})
@@ -112,29 +154,56 @@
     <!-- Filters and Search -->
     <div class="container mx-auto px-6 mb-8">
         <div class="bg-white rounded-xl shadow-lg p-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <!-- Search -->
+            <!-- Location Filters: Country > State > City -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-search mr-2 text-blue-600"></i>Search
+                        <i class="fas fa-globe mr-2 text-blue-600"></i>Country
                     </label>
-                    <input 
-                        type="text" 
-                        id="searchInput"
-                        placeholder="Search by name, location, category..."
+                    <select 
+                        id="countryFilter"
                         class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        oninput="filterPlaces()"
+                        onchange="loadStates()"
                     >
+                        <option value="">All Countries</option>
+                    </select>
                 </div>
 
-                <!-- Status Filter -->
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-filter mr-2 text-purple-600"></i>Status
+                        <i class="fas fa-map mr-2 text-green-600"></i>State/Province
+                    </label>
+                    <select 
+                        id="stateFilter"
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        onchange="loadCities()"
+                        disabled
+                    >
+                        <option value="">All States</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-city mr-2 text-purple-600"></i>City
+                    </label>
+                    <select 
+                        id="cityFilter"
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        onchange="filterPlaces()"
+                        disabled
+                    >
+                        <option value="">All Cities</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-filter mr-2 text-red-600"></i>Status
                     </label>
                     <select 
                         id="statusFilter"
-                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                         onchange="filterPlaces()"
                     >
                         <option value="all">All</option>
@@ -142,8 +211,23 @@
                         <option value="Old">Old Only</option>
                     </select>
                 </div>
+            </div>
 
-                <!-- Sort -->
+            <!-- Search and Sort -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-search mr-2 text-blue-600"></i>Search
+                    </label>
+                    <input 
+                        type="text" 
+                        id="searchInput"
+                        placeholder="Search by name, category..."
+                        class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        oninput="filterPlaces()"
+                    >
+                </div>
+
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">
                         <i class="fas fa-sort mr-2 text-green-600"></i>Sort By
@@ -159,14 +243,20 @@
                         <option value="location">Location</option>
                     </select>
                 </div>
+
+                <div class="flex items-end">
+                    <button onclick="exportData()" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+                        <i class="fas fa-download mr-2"></i>Export CSV
+                    </button>
+                </div>
             </div>
 
             <div class="flex items-center justify-between">
                 <p class="text-sm text-gray-600">
                     Showing <span id="visibleCount">{{ total_places }}</span> of {{ total_places }} places
                 </p>
-                <button onclick="exportData()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
-                    <i class="fas fa-download mr-2"></i>Export CSV
+                <button onclick="clearFilters()" class="text-sm text-gray-600 hover:text-gray-800">
+                    <i class="fas fa-times mr-1"></i>Clear Filters
                 </button>
             </div>
         </div>
@@ -177,34 +267,74 @@
         <div id="placesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {% for place in places %}
             <div class="place-card card-3d bg-white rounded-xl shadow-lg overflow-hidden" 
-                 data-title="{{ place.Title }}" 
-                 data-location="{{ place.Location }}" 
-                 data-category="{{ place.Category }}"
-                 data-status="{{ place.Status }}">
+                 data-title="{{ place.Title|lower }}" 
+                 data-location="{{ place.Location or '' }}" 
+                 data-category="{{ place.Category or '' }}"
+                 data-status="{{ place.Status or 'Old' }}"
+                 data-country="{{ (place.Location or '').split(' > ')[0] if ' > ' in (place.Location or '') else '' }}"
+                 data-state="{{ (place.Location or '').split(' > ')[1] if ' > ' in (place.Location or '') and (place.Location or '').split(' > ')|length > 1 else '' }}"
+                 data-city="{{ (place.Location or '').split(' > ')[2] if ' > ' in (place.Location or '') and (place.Location or '').split(' > ')|length > 2 else '' }}">
                 
+                <!-- Image Section -->
+                {% set has_gallery = place.get('Gallery') and place['Gallery'].strip() %}
+                {% if place['Banner Image'] or place['Logo Image'] or has_gallery %}
+                <div class="relative h-48 bg-gradient-to-r from-blue-600 to-purple-600 overflow-hidden">
+                    {% if place['Banner Image'] %}
+                    <img src="{{ place['Banner Image'] }}" alt="{{ place.Title }}" 
+                         class="w-full h-full object-cover"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    {% elif has_gallery %}
+                    {% set first_gallery_img = place['Gallery'].split(',')[0].strip() %}
+                    <img src="{{ first_gallery_img }}" alt="{{ place.Title }}" 
+                         class="w-full h-full object-cover"
+                         onerror="this.style.display='none';">
+                    {% endif %}
+                    {% if place['Logo Image'] %}
+                    <div class="absolute bottom-2 right-2 w-16 h-16 bg-white rounded-full p-1 shadow-lg flex items-center justify-center" style="display: {% if place['Banner Image'] or has_gallery %}none{% else %}flex{% endif %};">
+                        <img src="{{ place['Logo Image'] }}" alt="Logo" 
+                             class="w-full h-full object-contain rounded-full"
+                             onerror="this.parentElement.style.display='none';">
+                    </div>
+                    {% endif %}
+                    {% if has_gallery %}
+                    {% set gallery_count = place['Gallery'].split(',')|length %}
+                    <div class="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                        <i class="fas fa-images mr-1"></i>{{ gallery_count }} photos
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
                 <!-- Card Header -->
-                <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white">
-                    <div class="flex items-start justify-between">
+                <div class="p-4">
+                    <div class="flex items-start justify-between mb-2">
                         <div class="flex-1">
-                            <h3 class="font-bold text-lg mb-1">{{ place.Title }}</h3>
-                            <p class="text-sm opacity-90">
-                                <i class="fas fa-map-marker-alt mr-1"></i>{{ place.Location or place['Google Address'] }}
+                            <h3 class="font-bold text-lg mb-1 text-gray-800">{{ place.Title }}</h3>
+                            <p class="text-sm text-gray-600">
+                                <i class="fas fa-map-marker-alt mr-1"></i>
+                                {% if place.Location and ' > ' in place.Location %}
+                                    {% set loc_parts = place.Location.split(' > ') %}
+                                    {{ loc_parts[2] if loc_parts|length > 2 else loc_parts[1] if loc_parts|length > 1 else loc_parts[0] }}, {{ loc_parts[1] if loc_parts|length > 1 else '' }} {{ loc_parts[0] if loc_parts|length > 0 else '' }}
+                                {% else %}
+                                    {{ place['Google Address'] or place.Location or 'Location not available' }}
+                                {% endif %}
                             </p>
                         </div>
-                        <span class="px-3 py-1 rounded-full text-xs font-semibold {% if place.Status == 'New' %}bg-green-500{% else %}bg-gray-400{% endif %}">
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold {% if place.Status == 'New' %}bg-green-500 text-white{% else %}bg-gray-400 text-white{% endif %}">
                             {{ place.Status or 'Old' }}
                         </span>
                     </div>
-                </div>
 
-                <!-- Card Body -->
-                <div class="p-4">
                     {% if place.Category %}
                     <div class="mb-3">
                         <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
                             {{ place.Category }}
                         </span>
                     </div>
+                    {% endif %}
+
+                    {% if place.Tagline %}
+                    <p class="text-sm text-gray-600 italic mb-3">{{ place.Tagline }}</p>
                     {% endif %}
 
                     <!-- Contact Info -->
@@ -219,59 +349,31 @@
                         {% if place.Email %}
                         <div class="flex items-center text-sm text-gray-600">
                             <i class="fas fa-envelope w-5 text-purple-600"></i>
-                            <a href="mailto:{{ place.Email }}" class="hover:text-purple-600">{{ place.Email }}</a>
+                            <a href="mailto:{{ place.Email }}" class="hover:text-purple-600 truncate">{{ place.Email }}</a>
                         </div>
                         {% endif %}
 
                         {% if place.Website %}
                         <div class="flex items-center text-sm text-gray-600">
                             <i class="fas fa-globe w-5 text-green-600"></i>
-                            <a href="{{ place.Website }}" target="_blank" class="hover:text-green-600 truncate">Website</a>
+                            <a href="{{ place.Website }}" target="_blank" class="hover:text-green-600 truncate">Visit Website</a>
                         </div>
                         {% endif %}
                     </div>
 
-                    <!-- Social Links -->
-                    {% if place.Facebook or place.Twitter or place.Instagram or place.Linkedin or place.Youtube %}
-                    <div class="flex items-center space-x-2 mb-4">
-                        {% if place.Facebook %}
-                        <a href="{{ place.Facebook }}" target="_blank" class="text-blue-600 hover:text-blue-800">
-                            <i class="fab fa-facebook text-xl"></i>
-                        </a>
-                        {% endif %}
-                        {% if place.Twitter %}
-                        <a href="{{ place.Twitter }}" target="_blank" class="text-blue-400 hover:text-blue-600">
-                            <i class="fab fa-twitter text-xl"></i>
-                        </a>
-                        {% endif %}
-                        {% if place.Instagram %}
-                        <a href="{{ place.Instagram }}" target="_blank" class="text-pink-600 hover:text-pink-800">
-                            <i class="fab fa-instagram text-xl"></i>
-                        </a>
-                        {% endif %}
-                        {% if place.Linkedin %}
-                        <a href="{{ place.Linkedin }}" target="_blank" class="text-blue-700 hover:text-blue-900">
-                            <i class="fab fa-linkedin text-xl"></i>
-                        </a>
-                        {% endif %}
-                        {% if place.Youtube %}
-                        <a href="{{ place.Youtube }}" target="_blank" class="text-red-600 hover:text-red-800">
-                            <i class="fab fa-youtube text-xl"></i>
-                        </a>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-
                     <!-- Actions -->
                     <div class="flex gap-2">
+                        <button onclick="viewDetails({{ loop.index0 }})" class="flex-1 bg-purple-600 text-white text-center py-2 rounded-lg hover:bg-purple-700 transition text-sm">
+                            <i class="fas fa-eye mr-1"></i>View Details
+                        </button>
                         {% if place.Website %}
-                        <a href="{{ place.Website }}" target="_blank" class="flex-1 bg-blue-600 text-white text-center py-2 rounded-lg hover:bg-blue-700 transition text-sm">
-                            <i class="fas fa-external-link-alt mr-1"></i>Visit
+                        <a href="{{ place.Website }}" target="_blank" class="bg-blue-600 text-white text-center py-2 px-3 rounded-lg hover:bg-blue-700 transition text-sm">
+                            <i class="fas fa-external-link-alt"></i>
                         </a>
                         {% endif %}
                         {% if place.Latitude and place.Longitude %}
-                        <a href="https://www.google.com/maps?q={{ place.Latitude }},{{ place.Longitude }}" target="_blank" class="flex-1 bg-green-600 text-white text-center py-2 rounded-lg hover:bg-green-700 transition text-sm">
-                            <i class="fas fa-map-marker-alt mr-1"></i>Map
+                        <a href="https://www.google.com/maps?q={{ place.Latitude }},{{ place.Longitude }}" target="_blank" class="bg-green-600 text-white text-center py-2 px-3 rounded-lg hover:bg-green-700 transition text-sm">
+                            <i class="fas fa-map-marker-alt"></i>
                         </a>
                         {% endif %}
                     </div>
@@ -287,9 +389,141 @@
         </div>
     </div>
 
+    <!-- Details Modal -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-lg">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-bold" id="modalTitle">Place Details</h2>
+                    <button onclick="closeModal()" class="text-white hover:text-gray-200 text-2xl">&times;</button>
+                </div>
+            </div>
+            <div class="p-6" id="modalContent">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
     <script>
-        let allPlaces = document.querySelectorAll('.place-card');
+        // Store all places data
+        const allPlacesData = {{ places|tojson }};
         
+        // Debug: Check gallery images in data
+        console.log('Total places loaded:', allPlacesData.length);
+        const placesWithGallery = allPlacesData.filter(p => {
+            const gallery = p.Gallery || p['Gallery'];
+            return gallery && typeof gallery === 'string' && gallery.trim();
+        });
+        console.log('Places with gallery:', placesWithGallery.length);
+        if (placesWithGallery.length > 0) {
+            const sample = placesWithGallery[0];
+            const galleryCount = (sample.Gallery || sample['Gallery']).split(',').length;
+            console.log('Sample gallery:', sample.Title, 'has', galleryCount, 'images');
+        }
+        
+        let allPlaces = document.querySelectorAll('.place-card');
+        let countries = new Set();
+        let states = new Set();
+        let cities = new Set();
+
+        // Parse locations and populate filters
+        function initializeFilters() {
+            allPlaces.forEach(card => {
+                const location = card.dataset.location || '';
+                if (location && location.includes(' > ')) {
+                    const parts = location.split(' > ');
+                    if (parts[0]) countries.add(parts[0]);
+                    if (parts[1]) states.add(parts[1]);
+                    if (parts[2]) cities.add(parts[2]);
+                }
+            });
+
+            // Populate country filter
+            const countrySelect = document.getElementById('countryFilter');
+            Array.from(countries).sort().forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
+            });
+        }
+
+        // Load states based on selected country
+        async function loadStates() {
+            const country = document.getElementById('countryFilter').value;
+            const stateSelect = document.getElementById('stateFilter');
+            const citySelect = document.getElementById('cityFilter');
+            
+            stateSelect.innerHTML = '<option value="">All States</option>';
+            citySelect.innerHTML = '<option value="">All Cities</option>';
+            citySelect.disabled = true;
+
+            if (!country) {
+                stateSelect.disabled = true;
+                filterPlaces();
+                return;
+            }
+
+            stateSelect.disabled = false;
+            const filteredStates = new Set();
+
+            allPlaces.forEach(card => {
+                const location = card.dataset.location || '';
+                if (location && location.includes(' > ')) {
+                    const parts = location.split(' > ');
+                    if (parts[0] === country && parts[1]) {
+                        filteredStates.add(parts[1]);
+                    }
+                }
+            });
+
+            Array.from(filteredStates).sort().forEach(state => {
+                const option = document.createElement('option');
+                option.value = state;
+                option.textContent = state;
+                stateSelect.appendChild(option);
+            });
+
+            filterPlaces();
+        }
+
+        // Load cities based on selected state
+        async function loadCities() {
+            const country = document.getElementById('countryFilter').value;
+            const state = document.getElementById('stateFilter').value;
+            const citySelect = document.getElementById('cityFilter');
+            
+            citySelect.innerHTML = '<option value="">All Cities</option>';
+
+            if (!state) {
+                citySelect.disabled = true;
+                filterPlaces();
+                return;
+            }
+
+            citySelect.disabled = false;
+            const filteredCities = new Set();
+
+            allPlaces.forEach(card => {
+                const location = card.dataset.location || '';
+                if (location && location.includes(' > ')) {
+                    const parts = location.split(' > ');
+                    if (parts[0] === country && parts[1] === state && parts[2]) {
+                        filteredCities.add(parts[2]);
+                    }
+                }
+            });
+
+            Array.from(filteredCities).sort().forEach(city => {
+                const option = document.createElement('option');
+                option.value = city;
+                option.textContent = city;
+                citySelect.appendChild(option);
+            });
+
+            filterPlaces();
+        }
+
         // Calculate stats
         function calculateStats() {
             let websiteCount = 0;
@@ -309,25 +543,30 @@
             document.getElementById('locationCount').textContent = locations.size;
         }
 
-        calculateStats();
-
+        // Filter places
         function filterPlaces() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const statusFilter = document.getElementById('statusFilter').value;
+            const countryFilter = document.getElementById('countryFilter').value;
+            const stateFilter = document.getElementById('stateFilter').value;
+            const cityFilter = document.getElementById('cityFilter').value;
             let visibleCount = 0;
 
             allPlaces.forEach(card => {
-                const title = card.dataset.title.toLowerCase();
-                const location = card.dataset.location.toLowerCase();
+                const title = card.dataset.title;
                 const category = card.dataset.category.toLowerCase();
                 const status = card.dataset.status;
+                const country = card.dataset.country;
+                const state = card.dataset.state;
+                const city = card.dataset.city;
 
-                const matchesSearch = title.includes(searchTerm) || 
-                                     location.includes(searchTerm) || 
-                                     category.includes(searchTerm);
+                const matchesSearch = title.includes(searchTerm) || category.includes(searchTerm);
                 const matchesStatus = statusFilter === 'all' || status === statusFilter;
+                const matchesCountry = !countryFilter || country === countryFilter;
+                const matchesState = !stateFilter || state === stateFilter;
+                const matchesCity = !cityFilter || city === cityFilter;
 
-                if (matchesSearch && matchesStatus) {
+                if (matchesSearch && matchesStatus && matchesCountry && matchesState && matchesCity) {
                     card.style.display = 'block';
                     visibleCount++;
                 } else {
@@ -339,10 +578,23 @@
             document.getElementById('noResults').classList.toggle('hidden', visibleCount > 0);
         }
 
+        // Clear all filters
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statusFilter').value = 'all';
+            document.getElementById('countryFilter').value = '';
+            document.getElementById('stateFilter').value = '';
+            document.getElementById('cityFilter').value = '';
+            document.getElementById('stateFilter').disabled = true;
+            document.getElementById('cityFilter').disabled = true;
+            filterPlaces();
+        }
+
+        // Sort places
         function sortPlaces() {
             const sortBy = document.getElementById('sortSelect').value;
             const grid = document.getElementById('placesGrid');
-            const placesArray = Array.from(allPlaces);
+            const placesArray = Array.from(allPlaces).filter(card => card.style.display !== 'none');
 
             placesArray.sort((a, b) => {
                 switch(sortBy) {
@@ -362,14 +614,245 @@
             placesArray.forEach(card => grid.appendChild(card));
         }
 
+        // View details modal
+        function viewDetails(index) {
+            const place = allPlacesData[index];
+            if (!place) return;
+
+            document.getElementById('modalTitle').textContent = place.Title || 'Place Details';
+            const modalContent = document.getElementById('modalContent');
+            
+            // Parse location
+            let locationParts = {country: '', state: '', city: ''};
+            if (place.Location && place.Location.includes(' > ')) {
+                const parts = place.Location.split(' > ');
+                locationParts.country = parts[0] || '';
+                locationParts.state = parts[1] || '';
+                locationParts.city = parts[2] || '';
+            }
+
+            // Parse gallery images
+            let galleryImages = [];
+            // Try both Gallery and 'Gallery' field names
+            const galleryField = place.Gallery || place['Gallery'] || '';
+            if (galleryField && typeof galleryField === 'string' && galleryField.trim()) {
+                galleryImages = galleryField.split(',').map(img => img.trim()).filter(img => img);
+                console.log(`Found ${galleryImages.length} gallery images for ${place.Title}`);
+            } else {
+                console.log(`No gallery images found for ${place.Title}`, { Gallery: place.Gallery, 'Gallery': place['Gallery'] });
+            }
+
+            modalContent.innerHTML = `
+                <div class="space-y-6">
+                    <!-- Images -->
+                    ${place['Banner Image'] || place['Logo Image'] || galleryImages.length > 0 ? `
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-images mr-2"></i>Images</h3>
+                        ${place['Banner Image'] || place['Logo Image'] ? `
+                        <div class="flex gap-4 mb-4">
+                            ${place['Banner Image'] ? `
+                            <div class="flex-1">
+                                <label class="text-sm text-gray-600">Banner Image</label>
+                                <img src="${place['Banner Image']}" alt="Banner" class="w-full h-48 object-cover rounded-lg mt-1" onerror="this.style.display='none';">
+                            </div>
+                            ` : ''}
+                            ${place['Logo Image'] ? `
+                            <div class="w-32">
+                                <label class="text-sm text-gray-600">Logo</label>
+                                <img src="${place['Logo Image']}" alt="Logo" class="w-full h-32 object-contain rounded-lg mt-1 bg-gray-100 p-2" onerror="this.style.display='none';">
+                            </div>
+                            ` : ''}
+                        </div>
+                        ` : ''}
+                        ${galleryImages.length > 0 ? `
+                        <div class="mt-4">
+                            <label class="text-sm text-gray-600 font-semibold">Photo Gallery (${galleryImages.length} images)</label>
+                            <div class="image-gallery mt-2">
+                                ${galleryImages.map((img, idx) => `
+                                    <div class="relative group">
+                                        <img src="${img}" alt="Gallery ${idx + 1}" class="gallery-image" 
+                                             onerror="this.parentElement.innerHTML='<div class=\\'text-xs text-red-400 p-2\\'>Image failed to load</div>';" 
+                                             onclick="window.open('${img}', '_blank')">
+                                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition cursor-pointer flex items-center justify-center">
+                                            <i class="fas fa-expand text-white opacity-0 group-hover:opacity-100 transition"></i>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">Click any image to view full size</p>
+                        </div>
+                        ` : '<div class="text-sm text-gray-500 italic">No gallery images available</div>'}
+                    </div>
+                    ` : '<div class="text-sm text-gray-500 italic">No images available for this listing</div>'}
+
+                    <!-- Basic Info -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-info-circle mr-2"></i>Basic Information</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-sm text-gray-600">Title</label>
+                                <p class="font-semibold">${place.Title || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-600">Category</label>
+                                <p>${place.Category || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-600">Status</label>
+                                <p><span class="px-2 py-1 rounded ${place.Status === 'New' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">${place.Status || 'Old'}</span></p>
+                            </div>
+                            ${place.Tagline ? `
+                            <div class="col-span-2">
+                                <label class="text-sm text-gray-600">Tagline</label>
+                                <p class="italic">${place.Tagline}</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Location -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-map-marker-alt mr-2"></i>Location</h3>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="text-sm text-gray-600">Country</label>
+                                <p>${locationParts.country || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-600">State/Province</label>
+                                <p>${locationParts.state || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-600">City</label>
+                                <p>${locationParts.city || 'N/A'}</p>
+                            </div>
+                            <div class="col-span-3">
+                                <label class="text-sm text-gray-600">Full Address</label>
+                                <p>${place['Google Address'] || place.Location || 'N/A'}</p>
+                            </div>
+                            ${place.Latitude && place.Longitude ? `
+                            <div class="col-span-3">
+                                <label class="text-sm text-gray-600">Coordinates</label>
+                                <p>${place.Latitude}, ${place.Longitude}</p>
+                                <a href="https://www.google.com/maps?q=${place.Latitude},${place.Longitude}" target="_blank" class="text-blue-600 hover:underline text-sm">
+                                    <i class="fas fa-map-marker-alt mr-1"></i>View on Google Maps
+                                </a>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Contact -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-address-book mr-2"></i>Contact Information</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            ${place.Phone ? `
+                            <div>
+                                <label class="text-sm text-gray-600">Phone</label>
+                                <p><a href="tel:${place.Phone}" class="text-blue-600 hover:underline">${place.Phone}</a></p>
+                            </div>
+                            ` : ''}
+                            ${place.Email ? `
+                            <div>
+                                <label class="text-sm text-gray-600">Email</label>
+                                <p><a href="mailto:${place.Email}" class="text-blue-600 hover:underline">${place.Email}</a></p>
+                            </div>
+                            ` : ''}
+                            ${place.Website ? `
+                            <div class="col-span-2">
+                                <label class="text-sm text-gray-600">Website</label>
+                                <p><a href="${place.Website}" target="_blank" class="text-blue-600 hover:underline">${place.Website}</a></p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Social Media -->
+                    ${place.Facebook || place.Twitter || place.Instagram || place.Linkedin || place.Youtube ? `
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-share-alt mr-2"></i>Social Media</h3>
+                        <div class="flex flex-wrap gap-2">
+                            ${place.Facebook ? `<a href="${place.Facebook}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"><i class="fab fa-facebook mr-1"></i>Facebook</a>` : ''}
+                            ${place.Twitter ? `<a href="${place.Twitter}" target="_blank" class="bg-blue-400 text-white px-4 py-2 rounded-lg hover:bg-blue-500"><i class="fab fa-twitter mr-1"></i>Twitter</a>` : ''}
+                            ${place.Instagram ? `<a href="${place.Instagram}" target="_blank" class="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700"><i class="fab fa-instagram mr-1"></i>Instagram</a>` : ''}
+                            ${place.Linkedin ? `<a href="${place.Linkedin}" target="_blank" class="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800"><i class="fab fa-linkedin mr-1"></i>LinkedIn</a>` : ''}
+                            ${place.Youtube ? `<a href="${place.Youtube}" target="_blank" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"><i class="fab fa-youtube mr-1"></i>YouTube</a>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Description -->
+                    ${place.Description ? `
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-align-left mr-2"></i>Description</h3>
+                        <div class="prose max-w-none">${place.Description}</div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Additional Details -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2"><i class="fas fa-list mr-2"></i>Additional Details</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            ${place['Price Status ($-moderate)'] ? `
+                            <div>
+                                <label class="text-sm text-gray-600">Price Status</label>
+                                <p>${place['Price Status ($-moderate)']}</p>
+                            </div>
+                            ` : ''}
+                            ${place['Price From'] ? `
+                            <div>
+                                <label class="text-sm text-gray-600">Price From</label>
+                                <p>${place['Price From']}</p>
+                            </div>
+                            ` : ''}
+                            ${place.Features ? `
+                            <div class="col-span-2">
+                                <label class="text-sm text-gray-600">Features</label>
+                                <p>${place.Features}</p>
+                            </div>
+                            ` : ''}
+                            ${place['Tags (Keywords)'] ? `
+                            <div class="col-span-2">
+                                <label class="text-sm text-gray-600">Tags</label>
+                                <p>${place['Tags (Keywords)']}</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('detailsModal').style.display = 'block';
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('detailsModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('detailsModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Export data
         function exportData() {
             const statusFilter = document.getElementById('statusFilter').value;
+            const countryFilter = document.getElementById('countryFilter').value;
             let url = '/api/download';
-            if (statusFilter !== 'all') {
-                url += `?status=${statusFilter}`;
-            }
+            const params = [];
+            if (statusFilter !== 'all') params.push(`status=${statusFilter}`);
+            if (countryFilter) params.push(`location=${encodeURIComponent(countryFilter)}`);
+            if (params.length > 0) url += '?' + params.join('&');
             window.location.href = url;
         }
+
+        // Initialize
+        calculateStats();
+        initializeFilters();
     </script>
 </body>
 </html>
